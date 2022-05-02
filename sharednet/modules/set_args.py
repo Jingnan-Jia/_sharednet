@@ -21,7 +21,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--model_names', type=str,
                         help="'lobe_all', 'lobe_all_single', 'lobe_lu', 'lobe_ll', 'lobe_ru', 'lobe_rm', 'lobe_rl', "
                              "'vessel', 'AV_artery', 'AV_vein', ‘AV_all', 'liver', 'pancreas' ",
-                        default='liver-pancreas')
+                        default='pancreas')
     parser.add_argument('--mode', help='mode', type=str, choices=('train', 'infer'), default='train')
     parser.add_argument('--infer_data_dir', help='data directory for inference', type=str, default='')
     # parser.add_argument('--infer_weights_fpath', help='trained weights full path for inference', type=str, default='')
@@ -29,7 +29,7 @@ def get_args() -> argparse.Namespace:
 
     parser.add_argument('--loss', help='loss function', type=str, default='dice')
 
-    parser.add_argument('--cond_flag', help='if conditioning or not', type=boolean_string, default=False)
+    parser.add_argument('--cond_flag', help='if conditioning or not', type=boolean_string, default=True)
     parser.add_argument('--cond_method', help='conditioining method', type=str, choices=('concat', 'mul_add'),
                         default='concat')
     parser.add_argument('--cond_pos', help='condition position', type=str, choices=('input', 'enc', 'dec', 'enc_dec'),
@@ -37,7 +37,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--same_mask_value', help='mask values for different tasks', type=boolean_string, default=True)
 
     parser.add_argument('--base', help='channel number of the first conv layer', type=int, default=32)
-    parser.add_argument('--steps', help='training epochs', type=int, default=100001)
+    parser.add_argument('--steps', help='training epochs', type=int, default=50001)
     parser.add_argument('--valid_period', help='period for validation', type=int, default=2000)
 
     parser.add_argument('--lr', help='learning rate for lobe segmentation', type=float, default=0.0001)
