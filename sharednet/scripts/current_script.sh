@@ -53,15 +53,18 @@ echo $job_id
 scontrol write batch_script "${job_id}" sharednet/scripts/current_script.sh  # for the git commit latter
 
 git add -A
+sleep 2  # avoid error: fatal: Could not parse object (https://github.com/Shippable/support/issues/2932)
 git commit -m "jobid is ${job_id}"
+sleep 2
 git push origin master
+sleep 2
 exit
 ENDSSH
 
 echo "Hello, I am back in $(hostname) to run the code"
 
 # shellcheck disable=SC2046
-idx=0; export CUDA_VISIBLE_DEVICES=$idx; stdbuf -oL python -u run.py 2>${slurm_dir}/slurm-${job_id}_${idx}_err.txt 1>${slurm_dir}/slurm-${job_id}_${idx}_out.txt --outfile=${slurm_dir}/slurm-${job_id}_$idx --hostname="$(hostname)" --jobid=${job_id} --model_names="pancreas" --cond_flag=False --cond_pos='enc_dec' --mode='train' --infer_ID=0 --remark="pancreas, seed=711, to see if the valid dice higher than training dice"
+idx=0; export CUDA_VISIBLE_DEVICES=$idx; stdbuf -oL python -u run.py 2>${slurm_dir}/slurm-${job_id}_${idx}_err.txt 1>${slurm_dir}/slurm-${job_id}_${idx}_out.txt --outfile=${slurm_dir}/slurm-${job_id}_$idx --hostname="$(hostname)" --jobid=${job_id} --model_names="liver" --cond_flag=False --cond_pos='enc_dec' --mode='train' --infer_ID=0 --remark="liver, seed=711, to see if the valid dice higher than training dice"
 
 
 

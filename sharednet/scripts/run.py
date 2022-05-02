@@ -226,8 +226,8 @@ class Task:
         if step_id % 200 == 0:
             period = 1 if step_id==0 else 200  # the first accumulate_loss is the first loss
             # todo: change the title if loss function is changed
-            log_metric(self.model_name + '_TrDiceInBgTrainBatchIn200Steps', 1 - self.accumulate_loss/period, step_id)
-            log_metric(self.model_name + '_TrDiceExBgTrainBatchIn200Steps', 1 - self.accumulate_dice_ex_bg/period, step_id)
+            log_metric(self.model_name + '_TrDiceInBg', 1 - self.accumulate_loss/period, step_id)
+            log_metric(self.model_name + '_TrDiceExBg', 1 - self.accumulate_dice_ex_bg/period, step_id)
 
             self.accumulate_loss = 0
             self.accumulate_dice_ex_bg = 0
