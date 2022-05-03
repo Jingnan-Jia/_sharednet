@@ -43,21 +43,23 @@ class FilterMask(Transform):
                                     'liver': 1,
                                     'pancreas': 1}
         alpha = 16
-        self.mask_value_target = {'lobe_ru': 1/alpha,
-                                  'lobe_rm': 2/alpha,
-                                  'lobe_rl': 3/alpha,
-                                  'lobe_lu': 4/alpha,
-                                  'lobe_ll': 5/alpha,
-                                  'lobe_all': 6/alpha,
-                                  'lung': 7/alpha,
+        log_param('cond_alpha', alpha)
+        self.mask_value_target = {'lobe_ru': 1,
+                                  'lobe_rm': 2,
+                                  'lobe_rl': 3,
+                                  'lobe_lu': 4,
+                                  'lobe_ll': 5,
+                                  'lobe_all': 6,
+                                  'lung': 7,
 
-                                  'AV_artery': 8/alpha,
-                                  'AV_vein': 9/alpha,
-                                  'AV_all': 10/alpha,
-                                  'vessel': 11/alpha,  # label='MergePositiveLabels',
+                                  'AV_artery': 8,
+                                  'AV_vein': 9,
+                                  'AV_all': 10,
+                                  'vessel': 11,  # label='MergePositiveLabels',
 
-                                  'liver': 12/alpha,
-                                  'pancreas': 13/alpha}
+                                  'liver': 12,
+                                  'pancreas': 13}
+        self.mask_value_target = {key: np.array(value/alpha).astype(np.float32) for key, value in self.mask_value_target.items()}
 
         log_param('mask_value_target', str(self.mask_value_target))
         log_param('mask_value_original', str(self.mask_value_original))
@@ -137,5 +139,5 @@ def get_xforms(model_name, cond_flag, same_mask_value, patch_xy, patch_z, tsp_xy
         dtype = (np.float32,)
     else:
         raise Exception(f"mode {mode} is not correct, please set mode as 'train', 'val' or 'infer'. ")
-    xforms.extend([CastToTyped(keys, dtype=dtype), ToTensord(keys)])
+    xforms.extend([CastToTyped(("image", "mask"), dtype=(np.float32, np.uint8)), ToTensord(keys)])
     return monai.transforms.Compose(xforms)
