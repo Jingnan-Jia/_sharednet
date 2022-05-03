@@ -173,7 +173,7 @@ class Task:
 
     def step_vd(self, step_id):
         vd_image, vd_mask, vd_cond = next(self.vd_dl_endless)
-        vd_image, vd_mask, vd_cond = vd_image.to(self.device), vd_mask.to(self.device), vd_cond.to(self.device)
+        vd_image, vd_mask, vd_cond = vd_image.to(self.device), vd_mask.to(self.device), vd_cond.to(self.device, dtype=torch.float)
 
         vd_pred = self.net(vd_image, vd_cond)
         vd_loss = self.loss_fun(vd_pred, vd_mask)
