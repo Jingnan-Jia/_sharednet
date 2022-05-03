@@ -171,6 +171,28 @@ class Task:
         self.dice_fun_ex_bg = monai.losses.DiceLoss(to_onehot_y=True, softmax=True, include_background=False)
         self.inferer = get_inferer(self.psz_xy, self.psz_z, args.batch_size, 'infer')
 
+    def step_vd(self, step_id):
+        vd_image, vd_mask, vd_cond = next(self.vd_dl_endless)
+        vd_image, vd_mask, vd_cond = vd_image.to(self.device), vd_mask.to(self.device), vd_cond.to(self.device)
+
+        vd_pred = self.net(vd_image, vd_cond)
+        vd_loss = self.loss_fun(vd_pred, vd_mask)
+        vd_dice_ex_bg = self.dice_fun_ex_bg(vd_pred, vd_mask)
+
+        self.vd_accumulate_loss += vd_loss.item()
+        self.vd_accumulate_dice_ex_bg += vd_dice_ex_bg.item()
+
+        if step_id % 200 == 0:
+            period = 1 if step_id==0 else 200  # the first accumulate_loss is the first loss
+            # todo: change the title if loss function is changed
+
+            log_metric(self.model_name + '_VdDiceInBg', 1 - self.vd_accumulate_loss / period, step_id)
+            log_metric(self.model_name + '_VdDiceExBg', 1 - self.vd_accumulate_dice_ex_bg / period, step_id)
+
+            self.vd_accumulate_loss = 0
+            self.vd_accumulate_dice_ex_bg = 0
+
+
     def step(self, step_id, accu_grad, accu_grad_nb):
 
         self.scaler = torch.cuda.amp.GradScaler()
@@ -182,8 +204,6 @@ class Task:
         image, mask, cond = image.to(self.device), mask.to(self.device), cond.to(self.device)
         t3 = time.time()
 
-        vd_image, vd_mask, vd_cond = next(self.vd_dl_endless)
-        vd_image, vd_mask, vd_cond = vd_image.to(self.device), vd_mask.to(self.device), vd_cond.to(self.device)
 
         if args.amp:
             print('using amp ', end='')
@@ -191,10 +211,6 @@ class Task:
                 pred = self.net(image,cond)
                 loss = self.loss_fun(pred, mask)
                 dice_ex_bg = self.dice_fun_ex_bg(pred, mask)
-
-                vd_pred = self.net(vd_image, cond)
-                vd_loss = self.loss_fun(vd_pred, vd_mask)
-                vd_dice_ex_bg = self.dice_fun_ex_bg(vd_pred, vd_mask)
 
             t4 = time.time()
             if args.grad_accu:
@@ -234,9 +250,6 @@ class Task:
 
         self.accumulate_loss += loss.item()
         self.accumulate_dice_ex_bg += dice_ex_bg.item()
-
-        self.vd_accumulate_loss += vd_loss.item()
-        self.vd_accumulate_dice_ex_bg += vd_dice_ex_bg.item()
 
         if step_id % 200 == 0:
             period = 1 if step_id==0 else 200  # the first accumulate_loss is the first loss
@@ -390,6 +403,7 @@ def run(args: Namespace):
             for model_name, ta in ta_dict.items():
                 accu_grad = True if model_idx != len(model_names)-1 else False
                 ta.step(step_id, accu_grad=accu_grad, accu_grad_nb=len(model_names))
+                ta.step_vd(step_id)
                 if step_id % args.valid_period == 0 or step_id == args.steps - 1:
                     print(f"start a valid for {model_name} at time {time.time()}")
                     ta.eval_vd.run()
