@@ -260,11 +260,6 @@ class Task:
             self.accumulate_loss = 0
             self.accumulate_dice_ex_bg = 0
 
-            log_metric(self.model_name + '_VdDiceInBg', 1 - self.vd_accumulate_loss / period, step_id)
-            log_metric(self.model_name + '_VdDiceExBg', 1 - self.vd_accumulate_dice_ex_bg / period, step_id)
-
-            self.vd_accumulate_loss = 0
-            self.vd_accumulate_dice_ex_bg = 0
 
         if step_id <= 1200:  # log the loading time in 1200 steps
             log_metric(self.model_name + 'TimeLoad', t2-t1, step_id)
