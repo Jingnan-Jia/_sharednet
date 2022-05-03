@@ -154,6 +154,7 @@ class Task:
         self.device = torch.device("cuda")
         _, self.tr_dl, self.vd_dl, self.ts_dl = all_loaders(self.model_name)
         self.tr_dl_endless = loop_dl(self.tr_dl, args.batch_size)  # loop training dataset
+        self.vd_dl_endless = loop_dl(self.vd_dl, args.batch_size)  # loop training dataset
         self.psz_xy = int(args.psz.split("_")[0])
         self.psz_z = int(args.psz.split("_")[1])
 
@@ -163,6 +164,9 @@ class Task:
                                        out_chn)
         self.accumulate_loss = 0
         self.accumulate_dice_ex_bg = 0
+
+        self.vd_accumulate_loss = 0
+        self.vd_accumulate_dice_ex_bg = 0
 
         self.dice_fun_ex_bg = monai.losses.DiceLoss(to_onehot_y=True, softmax=True, include_background=False)
         self.inferer = get_inferer(self.psz_xy, self.psz_z, args.batch_size, 'infer')
@@ -178,6 +182,8 @@ class Task:
         image, mask, cond = image.to(self.device), mask.to(self.device), cond.to(self.device)
         t3 = time.time()
 
+        vd_image, vd_mask, vd_cond = next(self.vd_dl_endless)
+        vd_image, vd_mask, vd_cond = vd_image.to(self.device), vd_mask.to(self.device), vd_cond.to(self.device)
 
         if args.amp:
             print('using amp ', end='')
@@ -185,6 +191,11 @@ class Task:
                 pred = self.net(image,cond)
                 loss = self.loss_fun(pred, mask)
                 dice_ex_bg = self.dice_fun_ex_bg(pred, mask)
+
+                vd_pred = self.net(vd_image, cond)
+                vd_loss = self.loss_fun(vd_pred, vd_mask)
+                vd_dice_ex_bg = self.dice_fun_ex_bg(vd_pred, vd_mask)
+
             t4 = time.time()
             if args.grad_accu:
                 self.scaler.scale(loss/accu_grad_nb).backward()
@@ -223,6 +234,10 @@ class Task:
 
         self.accumulate_loss += loss.item()
         self.accumulate_dice_ex_bg += dice_ex_bg.item()
+
+        self.vd_accumulate_loss += vd_loss.item()
+        self.vd_accumulate_dice_ex_bg += vd_dice_ex_bg.item()
+
         if step_id % 200 == 0:
             period = 1 if step_id==0 else 200  # the first accumulate_loss is the first loss
             # todo: change the title if loss function is changed
@@ -231,6 +246,13 @@ class Task:
 
             self.accumulate_loss = 0
             self.accumulate_dice_ex_bg = 0
+
+            log_metric(self.model_name + '_VdDiceInBg', 1 - self.vd_accumulate_loss / period, step_id)
+            log_metric(self.model_name + '_VdDiceExBg', 1 - self.vd_accumulate_dice_ex_bg / period, step_id)
+
+            self.vd_accumulate_loss = 0
+            self.vd_accumulate_dice_ex_bg = 0
+
         if step_id <= 1200:  # log the loading time in 1200 steps
             log_metric(self.model_name + 'TimeLoad', t2-t1, step_id)
         if args.amp:
