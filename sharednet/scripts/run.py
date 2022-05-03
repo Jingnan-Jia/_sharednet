@@ -403,7 +403,7 @@ def run(args: Namespace):
             for model_name, ta in ta_dict.items():
                 accu_grad = True if model_idx != len(model_names)-1 else False
                 ta.step(step_id, accu_grad=accu_grad, accu_grad_nb=len(model_names))
-                ta.step_vd(step_id)
+                # ta.step_vd(step_id)
                 if step_id % args.valid_period == 0 or step_id == args.steps - 1:
                     print(f"start a valid for {model_name} at time {time.time()}")
                     ta.eval_vd.run()
