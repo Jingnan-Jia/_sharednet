@@ -33,7 +33,7 @@ ssh -tt jjia@nodelogin02 /bin/bash << ENDSSH
 echo "Hello, I an in nodelogin02 to do some git operations."
 echo $job_id
 
-jobs=$(squeue -u jjia --sort=+i | grep [^0-9]0:[00-60] | awk '{print $1}')
+jobs="$(squeue -u jjia --sort=+i | grep [^0-9]0:[00-60] | awk '{print $1}')"  # "" to make sure multi lines assigned
 echo "Total jobs in one minutes:"
 echo \$jobs
 
