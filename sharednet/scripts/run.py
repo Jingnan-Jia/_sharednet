@@ -441,8 +441,6 @@ def record_artifacts(outfile):
 
 
 if __name__ == "__main__":
-    log_dict: Dict[str, LogType] = {}  # a global dict to store variables saved to log files
-
     id, log_dict = record_1st(args)  # write super parameters from set_args.py to record file.
 
 

@@ -45,7 +45,9 @@ for i in \$jobs; do
     echo sleep \$accu seconds
     fi
 
-    accu=$((accu+5))
+    echo \$i
+    ((accu+=5))
+    echo \$accu
 done
 
 cd data/sharednet
