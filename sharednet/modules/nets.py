@@ -636,7 +636,7 @@ class CondnetConcat_(nn.Module):
             if cd is None:
                 return fun(*data)
             else:
-                return fun(*data, condition_input)
+                return fun(*data, cd)
 
         x0 = apply_fun(self.conv_0, condition_input, data=(x_batch, ))
         x0_down = self.max_pooling(x0)
