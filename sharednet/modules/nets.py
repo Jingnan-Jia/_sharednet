@@ -638,19 +638,19 @@ class CondnetConcat_(nn.Module):
             else:
                 return fun(*data, condition_input)
 
-        x0 = apply_fun(self.conv_0, condition_input, data=(x_batch))
+        x0 = apply_fun(self.conv_0, condition_input, data=(x_batch, ))
         x0_down = self.max_pooling(x0)
 
-        x1 = apply_fun(self.conv_1, condition_enc, data=(x0_down))
+        x1 = apply_fun(self.conv_1, condition_enc, data=(x0_down, ))
         x1_down = self.max_pooling(x1)
 
-        x2 = apply_fun(self.conv_2, condition_enc, data=(x1_down))
+        x2 = apply_fun(self.conv_2, condition_enc, data=(x1_down, ))
         x2_down = self.max_pooling(x2)
 
-        x3 = apply_fun(self.conv_3, condition_enc, data=(x2_down))
+        x3 = apply_fun(self.conv_3, condition_enc, data=(x2_down, ))
         x3_down = self.max_pooling(x3)
 
-        x4 = apply_fun(self.conv_4, condition_enc, data=(x3_down))
+        x4 = apply_fun(self.conv_4, condition_enc, data=(x3_down, ))
 
         u3 = apply_fun(self.upcat_4, condition_dec, data=(x4, x3))
         u2 = apply_fun(self.upcat_3, condition_dec, data=(u3, x2))
