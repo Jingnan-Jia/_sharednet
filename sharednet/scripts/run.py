@@ -366,7 +366,7 @@ def run(args: Namespace):
     log_param('out_chn', out_chn)
     net = get_net(args.cond_flag, args.cond_method, args.cond_pos, out_chn, args.base)
     net_parameters = count_parameters(net)
-    net_parameters = str(round(net_parameters / 1024 / 1024, 2))
+    net_parameters = round(net_parameters / 1000 / 1000, 2)
     log_param('net_parameters_M', net_parameters)
     device = torch.device("cuda")
     net = net.to(device)

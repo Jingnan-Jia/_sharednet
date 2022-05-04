@@ -83,6 +83,65 @@ class UpCatConvCond(nn.Module):
         return x
 
 
+class UpCatConvCond_(nn.Module):
+    """upsampling, concatenation with the encoder feature map, two convolutions"""
+
+    def __init__(
+        self,
+        dim: int,
+        in_chns: int,
+        cat_chns: int,
+        out_chns: int,
+        act: Union[str, tuple],
+        norm: Union[str, tuple],
+        dropout: Union[float, tuple] = 0.1,
+        upsample: str = "deconv",
+        halves: bool = True,
+    ):
+        """
+        Args:
+            dim: number of spatial dimensions.
+            in_chns: number of input channels to be upsampled.
+            cat_chns: number of channels from the decoder.
+            out_chns: number of output channels.
+            act: activation type and arguments.
+            norm: feature normalization type and arguments.
+            dropout: dropout ratio. Defaults to no dropout.
+            upsample: upsampling mode, available options are
+                ``"deconv"``, ``"pixelshuffle"``, ``"nontrainable"``.
+            halves: whether to halve the number of channels during upsampling.
+        """
+        super().__init__()
+
+        up_chns = in_chns // 2 if halves else in_chns
+        self.upsample = UpSample(dim, in_chns, up_chns, 2, mode=upsample)
+        self.convs = TwoConv(dim, cat_chns + up_chns, out_chns, act, norm, dropout)
+        self.convs_cond = TwoConv(dim, cat_chns + up_chns + 1, out_chns, act, norm, dropout)
+
+    def forward(self, x: torch.Tensor, x_e: torch.Tensor, cond: torch.Tensor):
+        """
+
+        Args:
+            x: features to be upsampled.
+            x_e: features from the encoder.
+            cond: features from the conditioning filter. It's channel number is only 1.
+        """
+        x_0 = self.upsample(x)
+        # handling spatial shapes due to the 2x maxpooling with odd edge lengths.
+        dimensions = len(x.shape) - 2
+        sp = [0] * (dimensions * 2)
+        for i in range(dimensions):
+            if x_e.shape[-i - 1] != x_0.shape[-i - 1]:
+                sp[i * 2 + 1] = 1
+        x_0 = torch.nn.functional.pad(x_0, sp, "replicate")
+
+        ones = torch.ones(x_0.shape[0], 1, *x_0.shape[2:]).to(torch.device("cuda"))
+        cond = ones * cond[:, None, None, None, None].to(torch.device("cuda"))
+        x = self.convs_cond(torch.cat([x_e, x_0, cond], dim=1))  # input channels: (cat_chns + up_chns + 1)
+        return x
+
+
+
 class UpCatConv(nn.Module):
     """upsampling, concatenation with the encoder feature map, two convolutions"""
 
@@ -137,6 +196,46 @@ class UpCatConv(nn.Module):
         x = self.convs(torch.cat([x_e, x_0], dim=1))  # input channels: (cat_chns + up_chns)
         return x
 
+
+class ConvCond_(nn.Module):
+    """upsampling, concatenation with the encoder feature map, two convolutions"""
+
+    def __init__(
+        self,
+        dim: int,
+        in_chns: int,
+        out_chns: int,
+        act: Union[str, tuple],
+        norm: Union[str, tuple],
+        dropout: Union[float, tuple] = 0.1,
+    ):
+        """
+        Args:
+            dim: number of spatial dimensions.
+            in_chns: number of input channels to be upsampled.
+            out_chns: number of output channels.
+            act: activation type and arguments.
+            norm: feature normalization type and arguments.
+            dropout: dropout ratio. Defaults to no dropout.
+            upsample: upsampling mode, available options are
+                ``"deconv"``, ``"pixelshuffle"``, ``"nontrainable"``.
+            halves: whether to halve the number of channels during upsampling.
+        """
+        super().__init__()
+
+        self.convs_cond = TwoConv(dim, in_chns + 1, out_chns, act, norm, dropout)
+
+    def forward(self, x: torch.Tensor, cond: torch.Tensor):
+        """
+
+        Args:
+            x: input features.
+            cond: conditioning features.
+        """
+        ones = torch.ones(x.shape[0], 1, *x.shape[2:]).to(torch.device("cuda"))
+        cond =  ones * cond[:, None, None, None, None].to(torch.device("cuda"))
+        x = self.convs_cond(torch.cat([x, cond], dim=1))  # input channels: (in_chns + 1)
+        return x
 
 class ConvCond(nn.Module):
     """upsampling, concatenation with the encoder feature map, two convolutions"""
@@ -422,11 +521,151 @@ class CondnetConcat(nn.Module):
 
         return u_out
 
+class CondnetConcat_(nn.Module):
+    def __init__(
+            self,
+            dimensions: int = 3,
+            in_channels: int = 1,
+            features: Sequence[int] = (32, 32, 64, 128, 256, 32),
+            act: Union[str, tuple] = ("LeakyReLU", {"negative_slope": 0.1, "inplace": True}),
+            norm: Union[str, tuple] = ("batch", {"affine": True}),
+            dropout: Union[float, tuple] = 0.1,
+
+            out_channels: int = 1,
+            upsample: str = "deconv",
+            cond_pos: str = "enc"
+
+    ):
+        """
+        A UNet implementation with 1D/2D/3D supports.
+
+        Based on:
+
+            Falk et al. "U-Net – Deep Learning for Cell Counting, Detection, and
+            Morphometry". Nature Methods 16, 67–70 (2019), DOI:
+            http://dx.doi.org/10.1038/s41592-018-0261-2
+
+        Args:
+            dimensions: number of spatial dimensions. Defaults to 3 for spatial 3D inputs.
+            in_channels: number of input channels. Defaults to 1.
+            features: six integers as numbers of features.
+                Defaults to ``(32, 32, 64, 128, 256, 32)``,
+
+                - the first five values correspond to the five-level encoder feature sizes.
+                - the last value corresponds to the feature size after the last upsampling.
+
+            act: activation type and arguments. Defaults to LeakyReLU.
+            norm: feature normalization type and arguments. Defaults to instance norm.
+            dropout: dropout ratio. Defaults to no dropout.
+            upsample: upsampling mode, available options are
+                ``"deconv"``, ``"pixelshuffle"``, ``"nontrainable"``.
+
+        Examples::
+
+
+        See Also
+
+            - :py:class:`monai.networks.nets.DynUNet`
+            - :py:class:`monai.networks.nets.UNet`
+
+        """
+        super().__init__()
+        self.cond_pos = cond_pos
+        fea = ensure_tuple_rep(features, 6)
+        print(f"BasicUNet features: {fea}.")
+        self.max_pooling = Pool["MAX", dimensions](kernel_size=2)
+        if self.cond_pos == 'input':
+            CONV0=ConvCond_
+        else:
+            CONV0=TwoConv
+
+        if self.cond_pos in ("enc", "enc_dec"):
+            CONVENC = ConvCond_
+        else:
+            CONVENC = TwoConv
+
+        if self.cond_pos in ("dec", "enc_dec"):
+            CONVDEC = UpCatConvCond_
+        else:
+            CONVDEC = UpCatConv
+
+        self.conv_0 = CONV0(dimensions, in_channels, fea[0], act, norm, dropout)
+        self.conv_1 = CONVENC(dimensions, fea[0], fea[1], act, norm, dropout)
+        self.conv_2 = CONVENC(dimensions, fea[1], fea[2], act, norm, dropout)
+        self.conv_3 = CONVENC(dimensions, fea[2], fea[3], act, norm, dropout)
+        self.conv_4 = CONVENC(dimensions, fea[3], fea[4], act, norm, dropout)
+
+        self.upcat_4 = CONVDEC(dimensions, fea[4], fea[3], fea[3], act, norm, dropout, upsample)
+        self.upcat_3 = CONVDEC(dimensions, fea[3], fea[2], fea[2], act, norm, dropout, upsample)
+        self.upcat_2 = CONVDEC(dimensions, fea[2], fea[1], fea[1], act, norm, dropout, upsample)
+        self.upcat_1 = CONVDEC(dimensions, fea[1], fea[0], fea[5], act, norm, dropout, upsample, halves=False)
+
+        self.final_conv = Conv["conv", dimensions](fea[5], out_channels, kernel_size=1)
+
+    def forward(self, x_batch: torch.Tensor, class_id_batch: torch.Tensor):
+        """
+        Args:
+            x: input should have spatially N dimensions
+                ``(Batch, in_channels, dim_0[, dim_1, ..., dim_N])``, N is defined by `dimensions`.
+                It is recommended to have ``dim_n % 16 == 0`` to ensure all maxpooling inputs have
+                even edge lengths.
+            class_id: a batch of inters or a batch of None.
+
+        Returns:
+            A torch Tensor of "raw" predictions in shape
+            ``(Batch, out_channels, dim_0[, dim_1, ..., dim_N])``.
+        """
+        condition: torch.Tensor = class_id_batch
+        if self.cond_pos == 'input':
+            condition_input = condition
+            condition_enc, condition_dec = None, None
+
+        elif self.cond_pos == 'enc':
+            condition_input, condition_dec = None, None
+            condition_enc = condition
+        elif self.cond_pos == 'dec':
+            condition_input, condition_enc = None, None
+            condition_dec = condition
+        elif self.cond_pos == 'enc_dec':
+            condition_dec, condition_enc = condition, condition
+            condition_input = None
+        else:
+            raise Exception(f"cond_pos is wrong: {self.cond_pos}")
+
+        def apply_fun(fun, cd, data):
+            if cd is None:
+                return fun(*data)
+            else:
+                return fun(*data, condition_input)
+
+        x0 = apply_fun(self.conv_0, condition_input, data=(x_batch))
+        x0_down = self.max_pooling(x0)
+
+        x1 = apply_fun(self.conv_1, condition_enc, data=(x0_down))
+        x1_down = self.max_pooling(x1)
+
+        x2 = apply_fun(self.conv_2, condition_enc, data=(x1_down))
+        x2_down = self.max_pooling(x2)
+
+        x3 = apply_fun(self.conv_3, condition_enc, data=(x2_down))
+        x3_down = self.max_pooling(x3)
+
+        x4 = apply_fun(self.conv_4, condition_enc, data=(x3_down))
+
+        u3 = apply_fun(self.upcat_4, condition_dec, data=(x4, x3))
+        u2 = apply_fun(self.upcat_3, condition_dec, data=(u3, x2))
+        u1 = apply_fun(self.upcat_2, condition_dec, data=(u2, x1))
+        u0 = apply_fun(self.upcat_1, condition_dec, data=(u1, x0))
+
+        u_out = self.final_conv(u0)
+
+        return u_out
+
 
 def condnet(cond_method, cond_pos, out_chn, base):
 
     if cond_method=='concat':
-        net = CondnetConcat(out_channels=out_chn,
+        net = CondnetConcat_(out_channels=out_chn,
                             features=(base, base, 2 * base, 4 * base, 8 * base, base),
                             dropout=0.1,  # when chaning it, do not forget to update log_param as well!
                             cond_pos=cond_pos)
